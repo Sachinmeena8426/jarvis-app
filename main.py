@@ -4,8 +4,9 @@ import requests
 from bs4 import BeautifulSoup
 import re
 from google import genai
-from gtts import gTTS
 from PIL import Image
+import edge_tts
+import asyncio
 
 # API Key load karna
 api_key = st.secrets["GEMINI_API_KEY"]
@@ -20,16 +21,22 @@ system_prompt = """Tum ek bahut hi smart aur friendly AI assistant ho jiska naam
 Tumhe hamesha Hinglish mein baat karni hai. Tumhara main kaam user ki B.Sc ki padhai aur SSC CGL ki taiyari mein unhe guide karna hai. 
 Agar user koi photo bheje ya website ka link de, toh usko dhyan se padh kar clear aur point-wise notes banane hain."""
 
-# --- NAYA FUNCTION: Website padhne ke liye ---
+# Website padhne ke liye function
 def read_website(url):
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get(url, headers=headers, timeout=5)
         soup = BeautifulSoup(response.text, 'html.parser')
         text = soup.get_text(separator=' ', strip=True)
-        return text[:4000] # Zyada lambi website se app hang na ho isliye limit
+        return text[:4000] 
     except:
         return "Error: Website padhne mein problem aayi."
+
+# --- NAYA FUNCTION: Advanced Awaaz (Male Voice) ---
+async def create_audio(text):
+    # 'hi-IN-MadhurNeural' ek natural Indian male awaaz hai
+    communicate = edge_tts.Communicate(text, "hi-IN-MadhurNeural")
+    await communicate.save("reply.mp3")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -52,7 +59,7 @@ if prompt:
         try:
             final_prompt = system_prompt + "\n\nUser: " + prompt
             
-            # Agar prompt mein koi Website Link (URL) hai
+            # Website Link check karna
             url_match = re.search(r'(https?://\S+)', prompt)
             if url_match:
                 url = url_match.group(0)
@@ -60,7 +67,7 @@ if prompt:
                 website_text = read_website(url)
                 final_prompt += f"\n\nWebsite ka content yeh hai: {website_text}\nAb iske basis par user ke sawal ka jawab do."
 
-            # Agar photo bheji hai
+            # Photo check karna
             if uploaded_file is not None:
                 image = Image.open(uploaded_file)
                 st.image(image, caption="Aapki photo", use_container_width=True)
@@ -76,9 +83,8 @@ if prompt:
             ai_reply = response.text
             st.markdown(ai_reply)
             
-            # Awaaz (Audio)
-            tts = gTTS(text=ai_reply, lang='hi')
-            tts.save("reply.mp3")
+            # Nayi Awaaz Generate karna
+            asyncio.run(create_audio(ai_reply))
             audio_file = open("reply.mp3", "rb")
             audio_bytes = audio_file.read()
             st.audio(audio_bytes, format='audio/mp3')
@@ -88,4 +94,5 @@ if prompt:
             ai_reply = "Sorry, thodi problem aayi."
             
     st.session_state.messages.append({"role": "assistant", "content": ai_reply})
+    
                 
